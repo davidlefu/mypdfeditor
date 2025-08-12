@@ -2,31 +2,122 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<title>PDF Editor — font-size picker & correct placement</title>
+<title>PDF Editor — Modern UI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  :root { --tb-font: 16px Arial; --tb-padding: 4px; }
-  body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
-  #toolbar { padding: 10px; background: #f3f3f3; display:flex; gap:8px; align-items:center; }
-  #pdf-wrapper { padding: 12px; }
-  #pdf-container { position: relative; display: inline-block; background: #ddd; }
-  canvas#pdf-canvas { display: block; border: 1px solid #bbb; }
+  :root {
+    --primary-color: #007bff;
+    --primary-color-hover: #0056b3;
+    --toolbar-bg: #f8f9fa;
+    --toolbar-border: #dee2e6;
+    --text-color: #212529;
+    --background-color: #e9ecef;
+    --pdf-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    --border-radius: 4px;
+    --tb-font: 16px 'Roboto', sans-serif;
+    --tb-padding: 8px;
+  }
+  body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    background: var(--background-color);
+    color: var(--text-color);
+  }
+  #toolbar {
+    padding: 10px 20px;
+    background: var(--toolbar-bg);
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    border-bottom: 1px solid var(--toolbar-border);
+  }
+  .toolbar-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  /* Style for all three buttons */
+  .toolbar-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--border-radius);
+    background-color: var(--primary-color);
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: background-color 0.2s, box-shadow 0.2s;
+  }
+  .toolbar-button:hover {
+    background-color: var(--primary-color-hover);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+  .toolbar-button:disabled {
+    background-color: #adb5bd;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+  /* Style specifically for the file input button */
+  #file-input-label {
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--border-radius);
+    background-color: #6c757d; /* A neutral color */
+    color: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: background-color 0.2s, box-shadow 0.2s;
+  }
+  #file-input-label:hover {
+    background-color: #5a6268;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+  #file-input {
+    display: none;
+  }
+  #pdf-wrapper {
+    padding: 20px;
+    display: flex;
+    justify-content: center;
+  }
+  #pdf-container {
+    position: relative;
+    display: inline-block;
+    background: #fff;
+    box-shadow: var(--pdf-shadow);
+  }
+  canvas#pdf-canvas {
+    display: block;
+    border: 1px solid var(--toolbar-border);
+  }
   .text-box {
     position: absolute;
     box-sizing: border-box;
-    border: 1px dashed rgba(0,0,0,0.5);
-    background: rgba(255,255,255,0.95);
+    border: 2px dashed var(--primary-color);
+    background: rgba(255,255,255,0.9);
     padding: var(--tb-padding);
     font: var(--tb-font);
-    resize: none;
+    resize: both;
     overflow: auto;
-    color: #000;
-    min-width: 20px;
-    min-height: 18px;
-    line-height: 1.2;
+    color: var(--text-color);
+    min-width: 40px;
+    min-height: 24px;
+    line-height: 1.4;
     white-space: pre-wrap;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .text-box:focus {
+    border-color: var(--primary-color);
   }
   .text-box.readonly {
-    border-style: none;
+    border: none;
     pointer-events: none;
     background: transparent;
   }
@@ -35,15 +126,40 @@
     z-index: 9999;
     font-size: 12px;
     background: #fff;
+    border: 1px solid var(--toolbar-border);
+    border-radius: var(--border-radius);
+    padding: 4px;
+    box-shadow: var(--pdf-shadow);
+  }
+  #status-container {
+    flex-grow: 1;
+    text-align: right;
+  }
+  #status {
+    font-size: 14px;
+    color: #6c757d;
+  }
+  .status-success {
+    color: #28a745;
+  }
+  .status-error {
+    color: #dc3545;
   }
 </style>
 </head>
 <body>
   <div id="toolbar">
-    <input id="file-input" type="file" accept="application/pdf" />
-    <button id="add-textbox">Add Text Box</button>
-    <button id="save-pdf">Save PDF</button>
-    <span id="status" style="color:#666; margin-left:8px;"></span>
+    <div class="toolbar-group">
+      <label for="file-input" id="file-input-label">Choose PDF File</label>
+      <input id="file-input" type="file" accept="application/pdf" />
+    </div>
+    <div class="toolbar-group">
+      <button id="add-textbox" class="toolbar-button">Add Text Box</button>
+      <button id="save-pdf" class="toolbar-button">Save PDF</button>
+    </div>
+    <div id="status-container">
+      <span id="status">Load a PDF to begin.</span>
+    </div>
   </div>
 
   <div id="pdf-wrapper">
@@ -78,7 +194,10 @@
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
   // status helper
-  function setStatus(msg) { statusSpan.textContent = msg || ''; }
+  function setStatus(msg, type = '') {
+    statusSpan.textContent = msg || '';
+    statusSpan.className = type ? `status-${type}` : '';
+  }
 
   // render with DPR handling
   async function renderPage(pageNumber = 1) {
@@ -99,6 +218,8 @@
     setStatus('Rendering page...');
     await currentPage.render({ canvasContext: ctx, viewport }).promise;
     setStatus('');
+    savePdfBtn.disabled = false;
+    addTextboxBtn.disabled = false;
   }
 
   // load PDF
@@ -113,9 +234,10 @@
         // clear old overlays
         Array.from(pdfContainer.querySelectorAll('.text-box, .font-picker')).forEach(n => n.remove());
         textboxes = [];
+        setStatus('PDF loaded successfully.', 'success');
       } catch (err) {
         console.error(err);
-        setStatus('Failed to load PDF: ' + err.message);
+        setStatus('Failed to load PDF: ' + err.message, 'error');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -125,6 +247,7 @@
   addTextboxBtn.addEventListener('click', () => {
     addingTextbox = true;
     setStatus('Click & drag on the PDF to draw a text box.');
+    addTextboxBtn.disabled = true;
   });
 
   // helper: CSS-coords relative to canvas using client positions
@@ -138,12 +261,10 @@
 
   pdfContainer.addEventListener('mousedown', (ev) => {
     if (!addingTextbox) return;
-    // ensure click is on container region (not outside)
     const { x: startX, y: startY } = getMousePosOnCanvas(ev.clientX, ev.clientY);
 
     ev.preventDefault();
 
-    // create textarea
     const ta = document.createElement('textarea');
     ta.className = 'text-box';
     ta.style.left = startX + 'px';
@@ -151,50 +272,43 @@
     ta.style.width = '2px';
     ta.style.height = '18px';
 
-    // create font size picker (select)
     const picker = document.createElement('select');
     picker.className = 'font-picker';
-    // --- MODIFICATION HERE ---
     [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64].forEach(s => {
       const opt = document.createElement('option');
       opt.value = s;
-      opt.textContent = s + 'pt'; // Changed to pt for clarity
+      opt.textContent = s + 'pt';
       if (s === 16) opt.selected = true;
       picker.appendChild(opt);
     });
-    // -------------------------
-    // initial position
-    picker.style.left = startX + 'px';
-    picker.style.top  = (startY - 30) + 'px';
 
-    // append
+    picker.style.left = startX + 'px';
+    picker.style.top  = (startY - 35) + 'px';
+
     pdfContainer.appendChild(ta);
     pdfContainer.appendChild(picker);
 
-    // apply picker's font size to textarea
     function updateFontFromPicker() {
       ta.style.fontSize = picker.value + 'px';
     }
     picker.addEventListener('change', updateFontFromPicker);
     updateFontFromPicker();
 
-    // ensure picker stays above and next to the textarea during drag
     function positionPicker() {
       const left = parseFloat(ta.style.left) || 0;
       const top = parseFloat(ta.style.top) || 0;
       picker.style.left = left + 'px';
-      picker.style.top = (top - 30) + 'px';
+      picker.style.top = (top - 35) + 'px';
     }
 
-    // track drag
     const sX = startX, sY = startY;
     function onMove(moveEv) {
       moveEv.preventDefault();
-      const { x: mx, y: my } = getMousePosOnCanvas(moveEv.clientX, moveEv.clientY);
+      const { x: mx, y: my } = getMousePosOnCanvas(moveEv.clientX, moveY);
       const left = Math.min(mx, sX);
       const top  = Math.min(my, sY);
-      const w = Math.max(2, Math.abs(mx - sX));
-      const h = Math.max(18, Math.abs(my - sY));
+      const w = Math.max(20, Math.abs(mx - sX));
+      const h = Math.max(24, Math.abs(my - sY));
       ta.style.left = Math.round(left) + 'px';
       ta.style.top  = Math.round(top)  + 'px';
       ta.style.width = Math.round(w) + 'px';
@@ -207,15 +321,12 @@
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
 
-      // focus textarea for typing
       ta.focus();
       addingTextbox = false;
       setStatus('Type text and choose font size. Click outside the box to finish.');
 
-      // set current editing references
       currentEditing = { ta, picker };
 
-      // install document mousedown finalizer that ignores clicks inside the textarea or the picker
       document.addEventListener('mousedown', documentFinalizer);
     }
 
@@ -227,12 +338,9 @@
   function documentFinalizer(ev) {
     if (!currentEditing) return;
     const { ta, picker } = currentEditing;
-    // If click target is inside the textarea or the picker, do nothing (allow interaction)
     if (ev.target instanceof Node && (ev.target.closest && (ev.target.closest('.text-box') === ta || ev.target.closest('.font-picker') === picker || ev.target === picker || ev.target === ta))) {
-      // click is inside; do nothing
       return;
     }
-    // otherwise finalize
     finalizeCurrentEditing();
   }
 
@@ -241,7 +349,6 @@
     if (!currentEditing) return;
     const { ta, picker } = currentEditing;
 
-    // get computed style
     const cs = window.getComputedStyle(ta);
     const fontSizeCss = parseFloat(picker.value) || parseFloat(cs.fontSize) || 16;
     const paddingTop = parseFloat(cs.paddingTop) || 0;
@@ -249,13 +356,11 @@
     const paddingBottom = parseFloat(cs.paddingBottom) || 0;
     const lineHeightCss = parseFloat(cs.lineHeight) || fontSizeCss * 1.2;
 
-    // final CSS position and size (CSS pixels)
     const finalLeft = parseFloat(ta.style.left) || ta.offsetLeft || 0;
     const finalTop  = parseFloat(ta.style.top)  || ta.offsetTop || 0;
     const finalW = ta.offsetWidth;
     const finalH = ta.offsetHeight;
 
-    // store normalized box
     const tb = {
       x: finalLeft,
       y: finalTop,
@@ -270,7 +375,6 @@
     };
     textboxes.push(tb);
 
-    // create readonly div to replace textarea
     const dv = document.createElement('div');
     dv.className = 'text-box readonly';
     dv.style.left = finalLeft + 'px';
@@ -283,34 +387,32 @@
     dv.style.paddingLeft = cs.paddingLeft;
     dv.style.font = cs.font;
     dv.style.lineHeight = cs.lineHeight;
-    // preserve whitespace-lines
     dv.textContent = ta.value;
 
-    // cleanup temporary elements
     ta.remove();
     picker.remove();
     pdfContainer.appendChild(dv);
 
-    // remove finalizer
     document.removeEventListener('mousedown', documentFinalizer);
     currentEditing = null;
     setStatus('');
+    addTextboxBtn.disabled = false;
   }
 
   // Save PDF: map CSS overlay coords -> PDF coordinates, measure ascent for baseline
   savePdfBtn.addEventListener('click', async () => {
     if (!pdfDoc || !currentPage) {
-      setStatus('No PDF loaded.');
+      setStatus('No PDF loaded.', 'error');
       return;
     }
     if (currentEditing) {
-      // finalize any open editor before saving
       finalizeCurrentEditing();
     }
     if (textboxes.length === 0) {
-      setStatus('No text boxes to save.');
+      setStatus('No text boxes to save.', 'error');
       return;
     }
+    savePdfBtn.disabled = true;
 
     setStatus('Saving PDF...');
     try {
@@ -320,13 +422,12 @@
       const page = pdfLibDoc.getPage(0);
       const viewport = currentPage.getViewport({ scale });
 
-      // measuring canvas for ascent
       const measureCanvas = document.createElement('canvas');
       const mctx = measureCanvas.getContext('2d');
 
       function measureAscent(fontCssString) {
         mctx.font = fontCssString;
-        const metrics = mctx.measureText('Mg'); // representative
+        const metrics = mctx.measureText('Mg');
         if (metrics && typeof metrics.actualBoundingBoxAscent === 'number') {
           return metrics.actualBoundingBoxAscent;
         }
@@ -335,15 +436,11 @@
       }
 
       for (const tb of textboxes) {
-        // compute baseline in CSS pixels: top of box + paddingTop + ascent
         const fontCss = (parseFloat(tb.fontSizeCss) || 16) + 'px Arial';
         const ascentCss = measureAscent(fontCss);
         const baselineCss = tb.y + (tb.paddingTop || 0) + ascentCss;
-
-        // convert CSS pixels -> PDF user units (divide by scale)
         const pdfX = (tb.x + (tb.paddingLeft || 0)) / scale;
         const pdfBaselineY = (viewport.height - baselineCss) / scale;
-
         const pdfFontSize = (tb.fontSizeCss || 16) / scale;
         const lines = (tb.text || '').split('\n');
         const lineStepCss = tb.lineHeightCss || (tb.fontSizeCss * 1.2);
@@ -359,7 +456,6 @@
             font: helveticaFont,
             color: PDFLib.rgb(0,0,0),
           });
-          // next line lower in PDF coords
           currentY -= lineStepPdf;
         }
       }
@@ -372,10 +468,12 @@
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setStatus('Saved PDF (download started).');
+      setStatus('Saved PDF (download started).', 'success');
     } catch (err) {
       console.error(err);
-      setStatus('Save failed: ' + err.message);
+      setStatus('Save failed: ' + err.message, 'error');
+    } finally {
+      savePdfBtn.disabled = false;
     }
   });
 
