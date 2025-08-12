@@ -1,404 +1,205 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>PDF Editor — accurate text box placement</title>
-    <style>
-      :root {
-        --tb-font: 16px Arial;
-        --tb-padding: 4px;
-      }
-      body {
-        font-family: system-ui, sans-serif;
-        margin: 0;
-        padding: 0;
-      }
-      #toolbar {
-        padding: 10px;
-        background: #f3f3f3;
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-      #pdf-wrapper {
-        padding: 12px;
-      }
-      #pdf-container {
-        position: relative;
-        display: inline-block;
-        background: #ddd;
-      }
-      canvas#pdf-canvas {
-        display: block;
-        border: 1px solid #bbb;
-      }
-      .text-box {
-        position: absolute;
-        box-sizing: border-box;
-        border: 1px dashed rgba(0, 0, 0, 0.5);
-        background: rgba(255, 255, 255, 0.9);
-        padding: var(--tb-padding);
-        font: var(--tb-font);
-        resize: none;
-        overflow: auto;
-        color: #000;
-        min-width: 20px;
-        min-height: 18px;
-        line-height: 1.2;
-        white-space: pre-wrap;
-      }
-      .text-box.readonly {
-        border-style: none;
-        pointer-events: none;
-        background: transparent;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="toolbar">
-      <input id="file-input" type="file" accept="application/pdf" />
-      <button id="add-textbox">Add Text Box</button>
-      <button id="save-pdf">Save PDF</button>
-      <span id="status" style="color: #666; margin-left: 8px"></span>
-    </div>
+<head>
+<meta charset="UTF-8">
+<title>PDF Editor with Text Boxes</title>
+<style>
+  body { font-family: sans-serif; margin: 0; padding: 0; }
+  #toolbar { padding: 10px; background: #eee; display: flex; gap: 10px; }
+  #pdf-container { position: relative; display: inline-block; }
+  #pdf-canvas { border: 1px solid #ccc; }
+  .text-box {
+    position: absolute;
+    border: 1px dashed #000;
+    background: rgba(255,255,255,0.8);
+    resize: none;
+    font: 16px Arial;
+    overflow: hidden;
+  }
+  .font-size-picker {
+    position: absolute;
+    top: -24px;
+    left: 0;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
 
-    <div id="pdf-wrapper">
-      <div id="pdf-container">
-        <canvas id="pdf-canvas"></canvas>
-      </div>
-    </div>
+<div id="toolbar">
+  <input type="file" id="file-input" accept="application/pdf">
+  <button id="add-textbox">Add Text Box</button>
+  <button id="save-pdf">Save PDF</button>
+</div>
 
-    <!-- pdf.js and pdf-lib from CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<div id="pdf-container">
+  <canvas id="pdf-canvas"></canvas>
+</div>
 
-    <script>
-      (async () => {
-        // ---- DOM refs ----
-        const fileInput = document.getElementById("file-input");
-        const addTextboxBtn = document.getElementById("add-textbox");
-        const savePdfBtn = document.getElementById("save-pdf");
-        const statusSpan = document.getElementById("status");
-        const pdfContainer = document.getElementById("pdf-container");
-        const pdfCanvas = document.getElementById("pdf-canvas");
-        const ctx = pdfCanvas.getContext("2d");
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+const fileInput = document.getElementById('file-input');
+const addTextboxBtn = document.getElementById('add-textbox');
+const savePdfBtn = document.getElementById('save-pdf');
+const pdfContainer = document.getElementById('pdf-container');
+const pdfCanvas = document.getElementById('pdf-canvas');
+const ctx = pdfCanvas.getContext('2d');
 
-        // ---- state ----
-        let pdfDoc = null; // PDF.js document
-        let currentPage = null; // PDF.js page (we only render page 1 in this example)
-        let scale = 1.5; // rendering scale (can be changed)
-        let addingTextbox = false;
-        let textboxes = []; // stored boxes: { x, y, w, h, text, fontSize, padding }
-        // We'll keep positions in CSS pixels relative to the visible canvas (pdfCanvas.getBoundingClientRect())
+let pdfDoc = null;
+let currentPage = null;
+let scale = 1.5;
+let addingTextbox = false;
+let textboxes = []; // store {x, y, w, h, text, fontSize}
 
-        // Tell PDF.js where its worker is (CDN)
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
 
-        // Utility: update status
-        function setStatus(msg) {
-          statusSpan.textContent = msg || "";
-        }
+// Load PDF into canvas
+async function loadPDF(arrayBuffer) {
+  pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  renderPage(1);
+}
 
-        // ---- Render page with DPR handling ----
-        async function renderPage(pageNumber = 1) {
-          currentPage = await pdfDoc.getPage(pageNumber);
-          const viewport = currentPage.getViewport({ scale });
+async function renderPage(num) {
+  currentPage = await pdfDoc.getPage(num);
+  const viewport = currentPage.getViewport({ scale });
+  pdfCanvas.width = viewport.width;
+  pdfCanvas.height = viewport.height;
+  
+  await currentPage.render({ canvasContext: ctx, viewport }).promise;
+}
 
-          // devicePixelRatio handling for crisp rendering
-          const dpr = Math.max(window.devicePixelRatio || 1, 1);
-          // Set canvas internal pixel size
-          pdfCanvas.width = Math.floor(viewport.width * dpr);
-          pdfCanvas.height = Math.floor(viewport.height * dpr);
-          // Set canvas CSS displayed size to viewport size (CSS px)
-          pdfCanvas.style.width = Math.floor(viewport.width) + "px";
-          pdfCanvas.style.height = Math.floor(viewport.height) + "px";
+// File input handler
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = (ev) => loadPDF(ev.target.result);
+    reader.readAsArrayBuffer(file);
+  }
+});
 
-          // Make container exactly the same size so overlays align
-          pdfContainer.style.width = pdfCanvas.style.width;
-          pdfContainer.style.height = pdfCanvas.style.height;
+addTextboxBtn.addEventListener('click', () => {
+  addingTextbox = true;
+});
 
-          // Scale context so PDF.js draws crisply at DPR
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+pdfContainer.addEventListener('mousedown', (e) => {
+  if (!addingTextbox) return;
+  
+  const startX = e.offsetX;
+  const startY = e.offsetY;
+  
+  const textarea = document.createElement('textarea');
+  textarea.className = 'text-box';
+  textarea.style.left = startX + 'px';
+  textarea.style.top = startY + 'px';
 
-          const renderContext = {
-            canvasContext: ctx,
-            viewport: viewport,
-          };
+  // Font size selector
+  const fontSizeSelect = document.createElement('select');
+  fontSizeSelect.className = 'font-size-picker';
+  [8, 10, 12, 14, 16, 18, 20, 24, 28, 32].forEach(size => {
+    const option = document.createElement('option');
+    option.value = size;
+    option.textContent = size + 'px';
+    if (size === 16) option.selected = true;
+    fontSizeSelect.appendChild(option);
+  });
+  textarea.fontSizeSelect = fontSizeSelect; // attach reference
 
-          setStatus("Rendering page...");
-          await currentPage.render(renderContext).promise;
-          setStatus("");
-        }
+  pdfContainer.appendChild(textarea);
+  pdfContainer.appendChild(fontSizeSelect);
 
-        // ---- Load PDF file ----
-        fileInput.addEventListener("change", (e) => {
-          const file = e.target.files && e.target.files[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = async (ev) => {
-            try {
-              pdfDoc = await pdfjsLib.getDocument({ data: ev.target.result })
-                .promise;
-              await renderPage(1);
-              textboxes = []; // clear any boxes from previous doc
-              // remove any overlay children (previous boxes)
-              Array.from(pdfContainer.querySelectorAll(".text-box")).forEach(
-                (n) => n.remove()
-              );
-            } catch (err) {
-              console.error(err);
-              setStatus("Failed to load PDF: " + err.message);
-            }
-          };
-          reader.readAsArrayBuffer(file);
-        });
+  function updateFontSize() {
+    textarea.style.fontSize = fontSizeSelect.value + 'px';
+  }
+  fontSizeSelect.addEventListener('change', updateFontSize);
+  updateFontSize();
 
-        // ---- Add text box flow ----
-        addTextboxBtn.addEventListener("click", () => {
-          addingTextbox = true;
-          setStatus("Click & drag on the PDF to draw a text box.");
-        });
+  function positionFontPicker() {
+    fontSizeSelect.style.left = textarea.style.left;
+    fontSizeSelect.style.top = (parseInt(textarea.style.top) - 24) + 'px';
+  }
+  positionFontPicker();
 
-        // Helper to get mouse coordinates relative to the canvas (CSS pixels)
-        function getMousePosOnCanvas(clientX, clientY) {
-          const rect = pdfCanvas.getBoundingClientRect();
-          return {
-            x: clientX - rect.left,
-            y: clientY - rect.top,
-            rectWidth: rect.width,
-            rectHeight: rect.height,
-          };
-        }
+  function onMouseMove(ev) {
+    const w = ev.offsetX - startX;
+    const h = ev.offsetY - startY;
+    textarea.style.width = Math.abs(w) + 'px';
+    textarea.style.height = Math.abs(h) + 'px';
+    textarea.style.left = (w < 0 ? ev.offsetX : startX) + 'px';
+    textarea.style.top = (h < 0 ? ev.offsetY : startY) + 'px';
+    positionFontPicker();
+  }
+  
+  function onMouseUp() {
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    textarea.focus();
+    addingTextbox = false;
+    
+    textarea.addEventListener('blur', () => {
+      const fontSize = parseInt(fontSizeSelect.value);
+      textboxes.push({
+        x: parseInt(textarea.style.left),
+        y: parseInt(textarea.style.top),
+        w: textarea.offsetWidth,
+        h: textarea.offsetHeight,
+        text: textarea.value,
+        fontSize
+      });
+      // make it uneditable
+      const div = document.createElement('div');
+      div.className = 'text-box';
+      div.style.left = textarea.style.left;
+      div.style.top = textarea.style.top;
+      div.style.width = textarea.style.width;
+      div.style.height = textarea.style.height;
+      div.style.border = 'none';
+      div.style.pointerEvents = 'none';
+      div.style.whiteSpace = 'pre-wrap';
+      div.style.padding = '2px';
+      div.style.fontSize = fontSize + 'px';
+      div.textContent = textarea.value;
+      pdfContainer.removeChild(textarea);
+      pdfContainer.removeChild(fontSizeSelect);
+      pdfContainer.appendChild(div);
+    });
+  }
+  
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+});
 
-        // We'll track drag state
-        let dragState = null;
+savePdfBtn.addEventListener('click', async () => {
+  if (!pdfDoc || !currentPage) return;
 
-        pdfContainer.addEventListener("mousedown", (ev) => {
-          if (!addingTextbox) return;
-          ev.preventDefault();
+  const pdfBytes = await pdfDoc.getData();
+  const pdfLibDoc = await PDFLib.PDFDocument.load(pdfBytes);
 
-          const { x: startX, y: startY } = getMousePosOnCanvas(
-            ev.clientX,
-            ev.clientY
-          );
+  const helveticaFont = await pdfLibDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+  const page = pdfLibDoc.getPage(0);
+  const viewport = currentPage.getViewport({ scale });
 
-          // create textarea overlay
-          const ta = document.createElement("textarea");
-          ta.className = "text-box";
-          // set styling explicitly so getComputedStyle later is consistent
-          ta.style.left = startX + "px";
-          ta.style.top = startY + "px";
-          ta.style.width = "2px";
-          ta.style.height = "18px";
-          // keep the textarea visible and editable
-          pdfContainer.appendChild(ta);
+  textboxes.forEach(tb => {
+    const pdfX = tb.x / scale;
+    const pdfY = (viewport.height - (tb.y + tb.h)) / scale + tb.fontSize * 0.25;
 
-          // store drag state and add move/up listeners
-          dragState = { ta, startX, startY };
+    page.drawText(tb.text, {
+      x: pdfX,
+      y: pdfY,
+      size: tb.fontSize,
+      font: helveticaFont,
+      color: PDFLib.rgb(0, 0, 0)
+    });
+  });
 
-          function onMove(moveEv) {
-            moveEv.preventDefault();
-            const { x: mx, y: my } = getMousePosOnCanvas(
-              moveEv.clientX,
-              moveEv.clientY
-            );
-            const w = Math.abs(mx - startX);
-            const h = Math.abs(my - startY);
-            const left = Math.min(mx, startX);
-            const top = Math.min(my, startY);
-            ta.style.left = Math.round(left) + "px";
-            ta.style.top = Math.round(top) + "px";
-            ta.style.width = Math.max(2, Math.round(w)) + "px";
-            ta.style.height = Math.max(18, Math.round(h)) + "px";
-          }
-
-          function onUp(upEv) {
-            upEv.preventDefault();
-            // remove listeners
-            document.removeEventListener("mousemove", onMove);
-            document.removeEventListener("mouseup", onUp);
-
-            // now focus the textarea so user can type
-            ta.focus();
-            addingTextbox = false;
-            setStatus("Type text, then click outside the box to finish.");
-
-            // On blur we finalize the box
-            ta.addEventListener(
-              "blur",
-              () => {
-                // read computed styles to capture font/padding/line-height etc
-                const cs = window.getComputedStyle(ta);
-                const fontSize = parseFloat(cs.fontSize) || 16;
-                const paddingTop = parseFloat(cs.paddingTop) || 0;
-                const paddingLeft = parseFloat(cs.paddingLeft) || 0;
-                const paddingBottom = parseFloat(cs.paddingBottom) || 0;
-                const lineHeightCss =
-                  parseFloat(cs.lineHeight) || fontSize * 1.2;
-
-                // Get final position/size (CSS pixels)
-                const finalLeft =
-                  parseFloat(ta.style.left) || ta.offsetLeft || 0;
-                const finalTop = parseFloat(ta.style.top) || ta.offsetTop || 0;
-                const finalW = ta.offsetWidth;
-                const finalH = ta.offsetHeight;
-
-                // store box info
-                const tb = {
-                  x: finalLeft,
-                  y: finalTop,
-                  w: finalW,
-                  h: finalH,
-                  text: ta.value,
-                  fontSizeCss: fontSize,
-                  paddingTop: paddingTop,
-                  paddingLeft: paddingLeft,
-                  paddingBottom: paddingBottom,
-                  lineHeightCss: lineHeightCss,
-                };
-                textboxes.push(tb);
-
-                // replace textarea with a readonly div for display
-                const dv = document.createElement("div");
-                dv.className = "text-box readonly";
-                dv.style.left = finalLeft + "px";
-                dv.style.top = finalTop + "px";
-                dv.style.width = finalW + "px";
-                dv.style.height = finalH + "px";
-                dv.style.padding = cs.padding;
-                dv.style.font = cs.font;
-                dv.style.lineHeight = cs.lineHeight;
-                dv.textContent = ta.value;
-                // remove textarea and show div
-                ta.remove();
-                pdfContainer.appendChild(dv);
-                setStatus("");
-              },
-              { once: true }
-            );
-          }
-
-          document.addEventListener("mousemove", onMove);
-          document.addEventListener("mouseup", onUp);
-        });
-
-        // ---- SAVE: map CSS overlay coords -> PDF coordinates correctly ----
-        savePdfBtn.addEventListener("click", async () => {
-          if (!pdfDoc || !currentPage) {
-            setStatus("No PDF loaded.");
-            return;
-          }
-          if (textboxes.length === 0) {
-            setStatus("No text boxes to save.");
-            return;
-          }
-          setStatus("Saving PDF...");
-          try {
-            // Get original PDF bytes from PDF.js document
-            const pdfBytes = await pdfDoc.getData();
-            const pdfLibDoc = await PDFLib.PDFDocument.load(pdfBytes);
-
-            // Embed font once
-            const helveticaFont = await pdfLibDoc.embedFont(
-              PDFLib.StandardFonts.Helvetica
-            );
-
-            // We'll write to page 0 (first page)
-            const page = pdfLibDoc.getPage(0);
-            // PDF.js viewport used for rendering (CSS px units)
-            const viewport = currentPage.getViewport({ scale });
-
-            // For precise measurements of CSS font ascent, create measuring canvas
-            const measureCanvas = document.createElement("canvas");
-            const mctx = measureCanvas.getContext("2d");
-
-            // Helper to measure ascent (in CSS pixels) for a given font string like "16px Arial"
-            function measureAscent(fontCssString) {
-              mctx.font = fontCssString;
-              // modern browsers provide actualBoundingBoxAscent
-              const metrics = mctx.measureText("Mg"); // 'Mg' tends to give representative ascent
-              if (
-                metrics &&
-                typeof metrics.actualBoundingBoxAscent === "number"
-              ) {
-                return metrics.actualBoundingBoxAscent;
-              }
-              // fallback estimate
-              const fs = parseFloat(fontCssString) || 16;
-              return fs * 0.8;
-            }
-
-            // For each text box, compute PDF coordinates and draw text (support multi-line)
-            for (const tb of textboxes) {
-              // compute pixel baseline in CSS px:
-              // baseline_css = tb.y (top of box) + paddingTop + measured ascent
-              const fontCss =
-                (parseFloat(tb.fontSizeCss) || 16) + "px " + "Arial";
-              const ascentCss = measureAscent(fontCss);
-              const baselineCss = tb.y + (tb.paddingTop || 0) + ascentCss;
-
-              // convert CSS pixel coordinates to PDF points (divide by 'scale')
-              // (Because viewport.height = page.getSize().height * scale)
-              const pdfX = (tb.x + (tb.paddingLeft || 0)) / scale;
-              const pdfBaselineY = (viewport.height - baselineCss) / scale;
-
-              // determine pdf font size (in PDF points) so it renders same visual size
-              // pdfFontSizePts = cssFontSizePx / scale
-              const pdfFontSize = (tb.fontSizeCss || 16) / scale;
-
-              // Draw multi-line text: split on \n and render subsequent lines below by lineHeight
-              const lines = (tb.text || "").split("\n");
-              // compute line step in CSS px, convert to PDF points
-              const lineStepCss = tb.lineHeightCss || tb.fontSizeCss * 1.2;
-              const lineStepPdf = lineStepCss / scale;
-
-              let currentY = pdfBaselineY;
-
-              for (let i = 0; i < lines.length; i++) {
-                const line = lines[i] || ""; // preserve empty lines
-                page.drawText(line, {
-                  x: pdfX,
-                  y: currentY,
-                  size: pdfFontSize,
-                  font: helveticaFont,
-                  color: PDFLib.rgb(0, 0, 0),
-                  // no wrapping: we assume user sized box appropriately
-                });
-                // move baseline down for next line (PDF coords: lower y is down)
-                currentY -= lineStepPdf;
-              }
-            }
-
-            // Save and download
-            const newPdfBytes = await pdfLibDoc.save();
-            const blob = new Blob([newPdfBytes], { type: "application/pdf" });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = "edited.pdf";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setStatus("Saved PDF (download started).");
-          } catch (err) {
-            console.error(err);
-            setStatus("Save failed: " + err.message);
-          }
-        });
-
-        // small convenience: warn if user resizes window (we do not auto-rescale overlay)
-        window.addEventListener("resize", () => {
-          // If you'd like to re-render on resize, call renderPage(1) again.
-          // For now we just update note.
-          setStatus(
-            "If you resized the window, re-open the PDF (or reload) to re-sync overlay size."
-          );
-          setTimeout(() => setStatus(""), 3000);
-        });
-
-        // initial status
-        setStatus("Load a PDF to begin.");
-      })();
-    </script>
-  </body>
+  const newPdfBytes = await pdfLibDoc.save();
+  const blob = new Blob([newPdfBytes], { type: 'application/pdf' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'edited.pdf';
+  link.click();
+});
+</script>
+</body>
 </html>
